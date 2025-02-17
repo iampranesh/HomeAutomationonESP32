@@ -1,0 +1,105 @@
+#include <WiFi.h> 
+#include <DHT.h> 
+ 
+// Wi-Fi credentials 
+const char* ssid = "Your_SSID"; 
+const char* password = "Your_PASSWORD"; 
+ 
+// Define pins and DHT type 
+#define RELAY_PIN 5 // Use this for Relay module 
+// #define MOSFET_PIN 5 // Use this for MOSFET control 
+#define ACS712_PIN 34 
+#define DHT_PIN 4 
+#define PIR_PIN 13 
+#define IR_PIN 12 
+#define FLOW_SENSOR_PIN 14 
+#define DHTTYPE DHT22 
+ 
+DHT dht(DHT_PIN, DHTTYPE); 
+volatile int pulseCount = 0; 
+float flowRate = 0.0; 
+unsigned long oldTime = 0; 
+ 
+void IRAM_ATTR pulseCounter() { 
+  pulseCount++; 
+} 
+ 
+void setup() { 
+  Serial.begin(115200); 
+ 
+  // Wi-Fi connection 
+  WiFi.begin(ssid, password); 
+  while (WiFi.status() != WL_CONNECTED) { 
+    delay(1000); 
+    Serial.println("Connecting to WiFi..."); 
+  } 
+  Serial.println("Connected to WiFi"); 
+ 
+  // Initialize sensors 
+  dht.begin(); 
+  pinMode(PIR_PIN, INPUT); 
+  pinMode(IR_PIN, INPUT); 
+  pinMode(FLOW_SENSOR_PIN, INPUT); 
+  pinMode(RELAY_PIN, OUTPUT); // Use this for Relay 
+  // pinMode(MOSFET_PIN, OUTPUT); // Use this for MOSFET 
+  attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING); 
+} 
+ 
+void loop() { 
+  // Read DHT22 sensor 
+  float temp = dht.readTemperature(); 
+  float hum = dht.readHumidity(); 
+  if (isnan(temp) || isnan(hum)) { 
+    Serial.println("Failed to read from DHT sensor!"); 
+  } else { 
+    Serial.print("Temperature: "); 
+    Serial.print(temp); 
+    Serial.print("°C "); 
+    Serial.print("Humidity: "); 
+    Serial.print(hum); 
+    Serial.println("%"); 
+  } 
+ 
+  // Read ACS712 current sensor 
+  int adcValue = analogRead(ACS712_PIN); 
+  float current = (adcValue - 512) * 0.185; // Adjust according to your ACS712 module 
+  Serial.print("Current: "); 
+  Serial.print(current); 
+  Serial.println(" A"); 
+ 
+  // Read PIR motion sensor 
+  int motion = digitalRead(PIR_PIN); 
+  Serial.print("Motion Detected: "); 
+  Serial.println(motion); 
+ 
+  // Read IR sensor 
+  int irValue = digitalRead(IR_PIN); 
+  Serial.print("IR Sensor: "); 
+  Serial.println(irValue); 
+ 
+  // Calculate flow rate 
+  if ((millis() - oldTime) > 1000) { 
+    detachInterrupt(FLOW_SENSOR_PIN); 
+    flowRate = ((1000.0 / (millis() - oldTime)) * pulseCount) / 7.5; // Adjust according to your 
+flow sensor 
+    oldTime = millis(); 
+    pulseCount = 0; 
+    Serial.print("Flow Rate: "); 
+    Serial.print(flowRate); 
+    Serial.println(" L/min"); 
+    attachInterrupt(digitalPinToInterrupt(FLOW_SENSOR_PIN), pulseCounter, FALLING); 
+  } 
+ 
+  // Control LED based on sensor data (e.g., motion sensor) 
+  if (motion == HIGH) { 
+    digitalWrite(RELAY_PIN, HIGH); // Turn on LED using Relay 
+    // digitalWrite(MOSFET_PIN, HIGH); // Turn on LED using MOSFET 
+  } else { 
+    digitalWrite(RELAY_PIN, LOW); // Turn off LED using Relay 
+    // digitalWrite(MOSFET_PIN, LOW); // Turn off LED using MOSFET 
+  } 
+ 
+  delay(2000); // Adjust delay as needed 
+} 
+ 
+Summary
