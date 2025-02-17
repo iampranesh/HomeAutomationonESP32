@@ -1,0 +1,31 @@
+#include <Wire.h>
+#include <Adafruit_MLX90614.h>
+
+// Initialize MLX90614 sensor
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+void setup() {
+    Serial.begin(115200);
+    Serial.println("MLX90614 IR Temperature Sensor Test");
+
+    // Start the sensor
+    if (!mlx.begin()) {
+        Serial.println("Error connecting to MLX90614. Check wiring!");
+        while (1); // Stop if sensor is not detected
+    }
+}
+
+void loop() {
+    // Read temperatures
+    float ambientTemp = mlx.readAmbientTempC();  // Ambient temperature
+    float objectTemp = mlx.readObjectTempC();    // Object temperature
+
+    // Print results to Serial Monitor
+    Serial.print("🌡 Ambient Temperature: ");
+    Serial.print(ambientTemp);
+    Serial.print("°C  |  Object Temperature: ");
+    Serial.print(objectTemp);
+    Serial.println("°C");
+
+    delay(2000); // Update every 2 seconds
+}
