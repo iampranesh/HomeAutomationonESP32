@@ -1,0 +1,46 @@
+#define BLYNK_TEMPLATE_ID "TMPL3PV6zJKMG"
+#define BLYNK_TEMPLATE_NAME "Inoxa"
+#define BLYNK_AUTH_TOKEN "f79f4uFMg7X39ZNqSTlmshFxUlRx"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+#include <DHT.h>
+
+#define DHTPIN 4      // DHT22 connected to GPIO4
+#define DHTTYPE DHT22 
+
+DHT dht(DHTPIN, DHTTYPE);
+
+char ssid[] = "WIFISSID";        // Replace with your Wi-Fi SSID
+char pass[] = "Password";      // Replace with a STRONG password
+
+BlynkTimer timer;
+
+void sendSensorData() {
+    float temperature = dht.readTemperature();  
+    float humidity = dht.readHumidity();       
+
+    if (!isnan(temperature) && !isnan(humidity)) {
+        Serial.print("Temperature: ");
+        Serial.print(temperature);
+        Serial.print("°C  |  Humidity: ");
+        Serial.println(humidity);
+
+        Blynk.virtualWrite(V1, temperature);  
+        Blynk.virtualWrite(V2, humidity);     
+    } else {
+        Serial.println("DHT22 Sensor Error!");
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+    dht.begin();
+    timer.setInterval(2000L, sendSensorData);  
+}
+
+void loop() {
+    Blynk.run();
+    timer.run();
+}
