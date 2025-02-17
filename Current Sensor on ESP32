@@ -1,0 +1,18 @@
+#define SENSOR_PIN A0  // ACS712 output connected to A0
+float mVperAmp = 185; // Change for different ACS712 versions: 5A=185, 20A=100, 30A=66
+
+void setup() {
+    Serial.begin(9600);
+}
+
+void loop() {
+    int sensorValue = analogRead(SENSOR_PIN);  // Read ADC value (0-1023)
+    float voltage = (sensorValue / 1024.0) * 5000; // Convert ADC to millivolts (5V = 5000mV)
+    float current = (voltage - 2500) / mVperAmp; // Convert to current (offset 2.5V)
+
+    Serial.print("Current: ");
+    Serial.print(current);
+    Serial.println(" A");
+
+    delay(1000);  // 1-second delay
+}
