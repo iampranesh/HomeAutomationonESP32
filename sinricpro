@@ -1,0 +1,153 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include "SinricPro.h"
+#include "SinricProSwitch.h"
+
+#include <map>
+
+#define WIFI_SSID         "pranpro"    
+#define WIFI_PASS         "cybozs73"
+#define APP_KEY           "001664d3-92e4-4deb-a8c9-11bde2cd1cb2"      
+#define APP_SECRET        "98d3109b-f4c1-4505-a55e-92e50f40171a-00e8ca0e-b0c8-4ff2-9d53-6ba739603ade"
+
+#define device_ID_1   "xxxxxxxxxxxxxxxxxxxxxxxx"
+#define device_ID_2   "67bd8e2442d73b1d7c572038"
+#define device_ID_3   "67bd8dca77d346f8f46f44e2"
+#define device_ID_4   "67bd8df777d346f8f46f4525"
+
+#define RelayPin1  18  
+#define RelayPin2  19  
+#define RelayPin3  21  
+#define RelayPin4  22  
+
+#define SwitchPin1 23  
+#define SwitchPin2 5   
+#define SwitchPin3 13  
+#define SwitchPin4 14  
+
+#define wifiLed   2   
+#define BAUD_RATE   115200
+#define DEBOUNCE_TIME 250
+
+typedef struct {      
+  int relayPIN;
+  int flipSwitchPIN;
+} deviceConfig_t;
+
+std::map<String, deviceConfig_t> devices = {
+    {device_ID_1, { RelayPin1, SwitchPin1 }},
+    {device_ID_2, { RelayPin2, SwitchPin2 }},
+    {device_ID_3, { RelayPin3, SwitchPin3 }},
+    {device_ID_4, { RelayPin4, SwitchPin4 }}    
+};
+
+typedef struct {      
+  String deviceId;
+  bool lastFlipSwitchState;
+  unsigned long lastFlipSwitchChange;
+} flipSwitchConfig_t;
+
+std::map<int, flipSwitchConfig_t> flipSwitches;
+
+void setupRelays() { 
+  for (auto &device : devices) {           
+    int relayPIN = device.second.relayPIN; 
+    pinMode(relayPIN, OUTPUT);             
+    digitalWrite(relayPIN, HIGH);
+  }
+}
+
+void setupFlipSwitches() {
+  for (auto &device : devices)  {                     
+    flipSwitchConfig_t flipSwitchConfig;              
+    flipSwitchConfig.deviceId = device.first;         
+    flipSwitchConfig.lastFlipSwitchChange = 0;        
+    flipSwitchConfig.lastFlipSwitchState = true;     
+
+    int flipSwitchPIN = device.second.flipSwitchPIN;  
+    flipSwitches[flipSwitchPIN] = flipSwitchConfig;   
+    pinMode(flipSwitchPIN, INPUT_PULLUP);                   
+  }
+}
+
+bool onPowerState(String deviceId, bool &state)
+{
+  Serial.printf("%s: %s\r\n", deviceId.c_str(), state ? "on" : "off");
+  int relayPIN = devices[deviceId].relayPIN;
+  digitalWrite(relayPIN, !state);             
+  return true;
+}
+
+void handleFlipSwitches() {
+  unsigned long actualMillis = millis();                                          
+  for (auto &flipSwitch : flipSwitches) {                                         
+    unsigned long lastFlipSwitchChange = flipSwitch.second.lastFlipSwitchChange;  
+    if (actualMillis - lastFlipSwitchChange > DEBOUNCE_TIME) {                    
+      int flipSwitchPIN = flipSwitch.first;                                       
+      bool lastFlipSwitchState = flipSwitch.second.lastFlipSwitchState;           
+      bool flipSwitchState = digitalRead(flipSwitchPIN);                          
+      if (flipSwitchState != lastFlipSwitchState) {                               
+          flipSwitch.second.lastFlipSwitchChange = actualMillis;                  
+          String deviceId = flipSwitch.second.deviceId;                           
+          int relayPIN = devices[deviceId].relayPIN;                              
+          bool newRelayState = !digitalRead(relayPIN);                            
+          digitalWrite(relayPIN, newRelayState);                                  
+
+          SinricProSwitch &mySwitch = SinricPro[deviceId];                        
+          mySwitch.sendPowerStateEvent(!newRelayState);                            
+        flipSwitch.second.lastFlipSwitchState = flipSwitchState;                  
+      }
+    }
+  }
+}
+
+void setupWiFi()
+{
+  Serial.printf("\r\n[Wifi]: Connecting");
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  int retry = 0;
+  while (WiFi.status() != WL_CONNECTED && retry < 20) {
+    Serial.print(".");
+    delay(500);
+    retry++;
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    digitalWrite(wifiLed, LOW);
+    Serial.printf("connected!\r\n[WiFi]: IP-Address is %s\r\n", WiFi.localIP().toString().c_str());
+  } else {
+    Serial.println("\r\n[WiFi]: Connection Failed! Restarting...");
+    ESP.restart();
+  }
+}
+
+void setupSinricPro()
+{
+  for (auto &device : devices)
+  {
+    const char *deviceId = device.first.c_str();
+    SinricProSwitch &mySwitch = SinricPro[deviceId];
+    mySwitch.onPowerState(onPowerState);
+  }
+
+  SinricPro.begin(APP_KEY, APP_SECRET);
+  SinricPro.restoreDeviceStates(true);
+}
+
+void setup()
+{
+  Serial.begin(BAUD_RATE);
+
+  pinMode(wifiLed, OUTPUT);
+  digitalWrite(wifiLed, HIGH);
+
+  setupRelays();
+  setupFlipSwitches();
+  setupWiFi();
+  setupSinricPro();
+}
+
+void loop()
+{
+  SinricPro.handle();
+  handleFlipSwitches();
+}
